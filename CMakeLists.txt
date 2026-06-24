@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Platform detection
 if(WIN32)
-    add_definitions(-DPLATFORM_WINDOWS)
+    add_definitions(-DPLATFORM_WINDOWS -D_CRT_SECURE_NO_WARNINGS)
 elseif(UNIX AND NOT APPLE)
     add_definitions(-DPLATFORM_LINUX)
 elseif(APPLE)

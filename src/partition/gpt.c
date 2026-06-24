@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef PLATFORM_WINDOWS
+#define strcasecmp _stricmp
+#endif
+
 // GPT constants
 #define GPT_SIGNATURE "EFI PART"
 #define GPT_HEADER_LBA 1
