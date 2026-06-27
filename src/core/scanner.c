@@ -131,6 +131,7 @@ static int scan_quick_mft(scan_task_t *task) {
         result.is_deleted = 1;
         result.is_directory = (info.flags & MFT_FLAG_DIRECTORY) ? 1 : 0;
         result.data_offset = info.data_lcn;
+        result.fs_type = FS_TYPE_NTFS;
         
         // Extract extension
         char *dot = strrchr(result.name, '.');

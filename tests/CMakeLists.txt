@@ -25,3 +25,7 @@ add_test(NAME test_fat COMMAND test_fat)
 add_executable(test_full test_full.c)
 target_link_libraries(test_full PRIVATE salvage_lib)
 add_test(NAME test_full COMMAND test_full)
+
+add_executable(test_ntfs test_ntfs.c)
+target_link_libraries(test_ntfs PRIVATE salvage_lib)
+add_test(NAME test_ntfs COMMAND test_ntfs)

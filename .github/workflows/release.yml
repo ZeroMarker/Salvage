@@ -57,6 +57,9 @@ jobs:
       - name: E2E Test (FAT32)
         run: python tests/e2e_fat32.py
 
+      - name: E2E Test (NTFS)
+        run: python tests/e2e_ntfs.py
+
       - name: Package
         run: |
           cd build/Release
