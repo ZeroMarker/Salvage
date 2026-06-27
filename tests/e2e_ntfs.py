@@ -113,8 +113,14 @@ if (-not $driveLetter) {{ $driveLetter = "Z" }}
 $drive = "${{driveLetter}}:"
 Write-Output "DRIVE=$drive"
 
-# Force flush
-[System.IO.Directory]::GetFiles($drive) | Out-Null
+# Check partition style
+$diskInfo = Get-Disk -Number $disk.Number
+Write-Output "DISK_SIZE=$($diskInfo.Size)"
+Write-Output "PART_STYLE=$($diskInfo.PartitionStyle)"
+
+# Flush file system buffers
+$vol = Get-Volume -DriveLetter $driveLetter
+Write-Output "VOL_FS=$($vol.FileSystem)"
 
 # Create directories
 New-Item -Path "$drive\\DOCS" -ItemType Directory -Force | Out-Null
