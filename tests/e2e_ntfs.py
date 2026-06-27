@@ -95,13 +95,13 @@ $vhd = New-VHD -Path $vhdPath -SizeBytes $sizeBytes -Fixed
 $disk = $vhd | Mount-VHD -PassThru
 Start-Sleep -Seconds 3
 
-# Initialize and format
-$disk | Initialize-Disk -PassThru -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
-$partition = $disk | New-Partition -UseMaximumSize -AssignDriveLetter
-Start-Sleep -Seconds 1
-$partition | Format-Volume -FileSystem NTFS -Force -Confirm:$false
+# Initialize with MBR partition style
+$disk | Initialize-Disk -PartitionStyle MBR -PassThru -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
+$partition = $disk | New-Partition -UseMaximumSize -AssignDriveLetter -IsActive
+Start-Sleep -Seconds 2
+$partition | Format-Volume -FileSystem NTFS -Force -Confirm:$false
+Start-Sleep -Seconds 3
 
 $drive = $partition.DriveLetter + ":"
 Write-Output "DRIVE=$drive"

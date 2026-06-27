@@ -33,61 +33,6 @@ static inline uint64_t bswap64(uint64_t x) {
            ((x << 56) & 0xFF00000000000000ULL);
 }
 
-// Little-endian to host
-static inline uint16_t le16toh(uint16_t x) {
-#if IS_BIG_ENDIAN
-    return bswap16(x);
-#else
-    return x;
-#endif
-}
-
-static inline uint32_t le32toh(uint32_t x) {
-#if IS_BIG_ENDIAN
-    return bswap32(x);
-#else
-    return x;
-#endif
-}
-
-static inline uint64_t le64toh(uint64_t x) {
-#if IS_BIG_ENDIAN
-    return bswap64(x);
-#else
-    return x;
-#endif
-}
-
-// Host to little-endian
-static inline uint16_t htole16(uint16_t x) { return le16toh(x); }
-static inline uint32_t htole32(uint32_t x) { return le32toh(x); }
-static inline uint64_t htole64(uint64_t x) { return le64toh(x); }
-
-// Big-endian to host
-static inline uint16_t be16toh(uint16_t x) {
-#if IS_BIG_ENDIAN
-    return x;
-#else
-    return bswap16(x);
-#endif
-}
-
-static inline uint32_t be32toh(uint32_t x) {
-#if IS_BIG_ENDIAN
-    return x;
-#else
-    return bswap32(x);
-#endif
-}
-
-static inline uint64_t be64toh(uint64_t x) {
-#if IS_BIG_ENDIAN
-    return x;
-#else
-    return bswap64(x);
-#endif
-}
-
 // Read little-endian values from byte array
 static inline uint16_t read_le16(const uint8_t *p) {
     return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
