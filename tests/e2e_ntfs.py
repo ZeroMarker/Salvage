@@ -65,22 +65,20 @@ def cleanup():
 
 def create_ps_script():
     """Write PowerShell script that creates VHD, writes files, deletes some, dismounts."""
-    # Build file creation lines
+    # Build file creation lines using WriteAllBytes
     write_lines = []
     for name, content in TEST_FILES.items():
         b64 = __import__('base64').b64encode(content).decode()
-        write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("{name}", $b)')
+        write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("$drive\\{name}", $b)')
 
-    # Nested files
-    nested_dirs = ['DOCS', 'PROJECT' + os.sep + 'SRC', 'My Files']
     for name, content in NESTED_FILES.items():
         b64 = __import__('base64').b64encode(content).decode()
         if name == 'README.TXT':
-            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("DOCS\\{name}", $b)')
+            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("$drive\\DOCS\\{name}", $b)')
         elif name == 'main.c':
-            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("PROJECT\\SRC\\{name}", $b)')
+            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("$drive\\PROJECT\\SRC\\{name}", $b)')
         elif name == 'notes.txt':
-            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("My Files\\{name}", $b)')
+            write_lines.append(f'$b = [Convert]::FromBase64String("{b64}"); [IO.File]::WriteAllBytes("$drive\\My Files\\{name}", $b)')
 
     delete_lines = [
         'Get-ChildItem -Path $drive -Recurse -File | Remove-Item -Force',
@@ -128,7 +126,6 @@ New-Item -Path "$drive\\PROJECT\\SRC" -ItemType Directory -Force | Out-Null
 New-Item -Path "$drive\\My Files" -ItemType Directory -Force | Out-Null
 
 # Write files (using base64 to handle binary content)
-Set-Location $drive
 {chr(10).join(write_lines)}
 
 # Verify files exist
@@ -142,9 +139,8 @@ Write-Output "FILES=$($files.Count)"
 $remaining = Get-ChildItem -Path $drive -Recurse -File
 Write-Output "REMAINING=$($remaining.Count)"
 
-# Dismount
-Set-Location C:\\
-Dismount-VHD -Path $vhdPath
+# Dismount VHD
+Dismount-VHD -Path $vhdPath -Confirm:$false
 Write-Output "DONE"
 '''
     with open(PS_SCRIPT, 'w', encoding='utf-8') as f:
