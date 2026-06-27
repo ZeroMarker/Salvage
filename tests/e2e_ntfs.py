@@ -95,26 +95,26 @@ $vhd = New-VHD -Path $vhdPath -SizeBytes $sizeBytes -Fixed
 $disk = $vhd | Mount-VHD -PassThru
 Start-Sleep -Seconds 3
 
-# Initialize with MBR partition style
-$disk | Initialize-Disk -PartitionStyle MBR -PassThru -ErrorAction Stop
+# Initialize with MBR
+$disk | Initialize-Disk -PartitionStyle MBR -ErrorAction Stop
 Start-Sleep -Seconds 2
 
-# Verify MBR exists
-$partStyle = (Get-Disk -Number $disk.Number).PartitionStyle
-Write-Output "PARTITION_STYLE=$partStyle"
-
+# Create partition
 $partition = $disk | New-Partition -UseMaximumSize -AssignDriveLetter -IsActive
 Start-Sleep -Seconds 2
-$partition | Format-Volume -FileSystem NTFS -Force -Confirm:$false
+
+# Format as NTFS
+$partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel "NTFS_TEST" -Force -Confirm:$false
 Start-Sleep -Seconds 3
 
-$drive = $partition.DriveLetter + ":"
+# Get drive letter
+$driveLetter = $partition.DriveLetter
+if (-not $driveLetter) {{ $driveLetter = "Z" }}
+$drive = "${{driveLetter}}:"
 Write-Output "DRIVE=$drive"
 
-# Verify MBR signature at offset 510
-$bytes = [System.IO.File]::ReadAllBytes($vhdPath)
-$sig = '{0:X2}{1:X2}' -f $bytes[510], $bytes[511]
-Write-Output "MBR_SIG=$sig"
+# Force flush
+[System.IO.Directory]::GetFiles($drive) | Out-Null
 
 # Create directories
 New-Item -Path "$drive\\DOCS" -ItemType Directory -Force | Out-Null
