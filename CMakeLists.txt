@@ -60,6 +60,18 @@ set(NTFS_SOURCES
     src/fs/ntfs/data_run.c
 )
 
+set(FAT_SOURCES
+    src/fs/fat/fat_boot.c
+    src/fs/fat/fat_dir.c
+    src/fs/fat/fat_data.c
+)
+
+set(EXFAT_SOURCES
+    src/fs/exfat/exfat_boot.c
+    src/fs/exfat/exfat_dir.c
+    src/fs/exfat/exfat_data.c
+)
+
 set(SIGNATURE_SOURCES
     src/signature/database.c
     src/signature/matcher.c
@@ -77,6 +89,8 @@ add_library(salvage_lib STATIC
     ${DEVICE_SOURCES}
     ${PARTITION_SOURCES}
     ${NTFS_SOURCES}
+    ${FAT_SOURCES}
+    ${EXFAT_SOURCES}
     ${SIGNATURE_SOURCES}
     ${CORE_SOURCES}
 )

@@ -5,7 +5,7 @@
 #include "utils/log.h"
 
 static void print_version(void) {
-    printf("Salvage v0.1.0 - Data Recovery Tool\n");
+    printf("Salvage v0.2.0 - Data Recovery Tool\n");
 }
 
 static void print_usage(void) {

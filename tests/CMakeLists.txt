@@ -17,3 +17,11 @@ add_test(NAME test_signature COMMAND test_signature)
 add_executable(test_scanner test_scanner.c)
 target_link_libraries(test_scanner PRIVATE salvage_lib)
 add_test(NAME test_scanner COMMAND test_scanner)
+
+add_executable(test_fat test_fat.c)
+target_link_libraries(test_fat PRIVATE salvage_lib)
+add_test(NAME test_fat COMMAND test_fat)
+
+add_executable(test_full test_full.c)
+target_link_libraries(test_full PRIVATE salvage_lib)
+add_test(NAME test_full COMMAND test_full)

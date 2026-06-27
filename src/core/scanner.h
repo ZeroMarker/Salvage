@@ -29,6 +29,8 @@ typedef struct {
     float confidence;        // Recovery confidence (0-100)
     sig_category_t category; // File category
     char signature_name[32]; // Signature match name
+    uint8_t  fs_type;        // Source filesystem type
+    uint32_t first_cluster;  // First cluster (FAT32/exFAT)
 } scan_result_t;
 
 // Scan task

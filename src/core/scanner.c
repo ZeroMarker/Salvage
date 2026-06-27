@@ -4,6 +4,8 @@
 #include "utils/time.h"
 #include "utils/str.h"
 #include "utils/progress.h"
+#include "fs/fat/fat.h"
+#include "fs/exfat/exfat.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -254,6 +256,86 @@ static int scan_signature(scan_task_t *task) {
     return SALVAGE_OK;
 }
 
+// Quick scan FAT32 for deleted files
+static void fat_result_callback(fat_file_info_t *info, void *ctx) {
+    scan_task_t *task = (scan_task_t *)ctx;
+
+    if ((info->attributes & FAT_ATTR_DIRECTORY) && info->file_size == 0) return;
+
+    scan_result_t result;
+    memset(&result, 0, sizeof(scan_result_t));
+
+    result.file_id = info->first_cluster;
+    strncpy(result.name, info->name, sizeof(result.name) - 1);
+    result.size = info->file_size;
+    result.is_deleted = 1;
+    result.is_directory = (info->attributes & FAT_ATTR_DIRECTORY) ? 1 : 0;
+    result.first_cluster = info->first_cluster;
+    result.fs_type = FS_TYPE_FAT32;
+
+    char *dot = strrchr(result.name, '.');
+    if (dot) strncpy(result.extension, dot + 1, sizeof(result.extension) - 1);
+
+    result.confidence = 60.0;
+    if (info->first_cluster >= 2) result.confidence += 15.0;
+    if (info->file_size > 0) result.confidence += 10.0;
+
+    result_list_add(&task->results, &result);
+}
+
+static int scan_quick_fat(scan_task_t *task) {
+    fat_volume_t vol;
+    int ret = fat_init(&vol, task->device, task->partition.start_lba);
+    if (ret != SALVAGE_OK) {
+        LOG_ERROR("Failed to initialize FAT32 volume");
+        return ret;
+    }
+
+    LOG_INFO("Scanning FAT32 for deleted files...");
+    fat_scan_deleted(&vol, fat_result_callback, task);
+    return SALVAGE_OK;
+}
+
+// Quick scan exFAT for deleted files
+static void exfat_result_callback(exfat_file_info_t *info, void *ctx) {
+    scan_task_t *task = (scan_task_t *)ctx;
+
+    if ((info->attributes & EXFAT_ATTR_DIRECTORY) && info->data_length == 0) return;
+
+    scan_result_t result;
+    memset(&result, 0, sizeof(scan_result_t));
+
+    result.file_id = info->first_cluster;
+    strncpy(result.name, info->name, sizeof(result.name) - 1);
+    result.size = info->valid_data_length;
+    result.is_deleted = 1;
+    result.is_directory = (info->attributes & EXFAT_ATTR_DIRECTORY) ? 1 : 0;
+    result.first_cluster = info->first_cluster;
+    result.fs_type = FS_TYPE_EXFAT;
+
+    char *dot = strrchr(result.name, '.');
+    if (dot) strncpy(result.extension, dot + 1, sizeof(result.extension) - 1);
+
+    result.confidence = 60.0;
+    if (info->first_cluster >= 2) result.confidence += 15.0;
+    if (info->valid_data_length > 0) result.confidence += 10.0;
+
+    result_list_add(&task->results, &result);
+}
+
+static int scan_quick_exfat(scan_task_t *task) {
+    exfat_volume_t vol;
+    int ret = exfat_init(&vol, task->device, task->partition.start_lba);
+    if (ret != SALVAGE_OK) {
+        LOG_ERROR("Failed to initialize exFAT volume");
+        return ret;
+    }
+
+    LOG_INFO("Scanning exFAT for deleted files...");
+    exfat_scan_deleted(&vol, exfat_result_callback, task);
+    return SALVAGE_OK;
+}
+
 int scan_start(scan_task_t *task) {
     if (!task) return SALVAGE_ERR_INVALID;
     
@@ -264,6 +346,12 @@ int scan_start(scan_task_t *task) {
     if (task->mode == SCAN_QUICK || task->mode == SCAN_DEEP) {
         if (task->partition.fs_type == FS_TYPE_NTFS) {
             ret = scan_quick_mft(task);
+            if (ret != SALVAGE_OK && task->mode == SCAN_QUICK) return ret;
+        } else if (task->partition.fs_type == FS_TYPE_FAT32) {
+            ret = scan_quick_fat(task);
+            if (ret != SALVAGE_OK && task->mode == SCAN_QUICK) return ret;
+        } else if (task->partition.fs_type == FS_TYPE_EXFAT) {
+            ret = scan_quick_exfat(task);
             if (ret != SALVAGE_OK && task->mode == SCAN_QUICK) return ret;
         }
     }

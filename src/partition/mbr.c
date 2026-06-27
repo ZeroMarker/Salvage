@@ -22,7 +22,21 @@ typedef struct {
 } mbr_t;
 #pragma pack(pop)
 
-static fs_type_t detect_fs_from_mbr_type(uint8_t type) {
+static fs_type_t detect_fs_from_boot(device_t *dev, uint64_t start_lba) {
+    uint8_t sector[512];
+    if (device_read_sectors(dev, start_lba, 1, sector) != SALVAGE_OK) {
+        return FS_TYPE_UNKNOWN;
+    }
+    // Check OEM name at offset 3
+    if (memcmp(sector + 3, "EXFAT   ", 8) == 0) return FS_TYPE_EXFAT;
+    if (memcmp(sector + 3, "NTFS    ", 8) == 0) return FS_TYPE_NTFS;
+    if (memcmp(sector + 3, "FAT32   ", 8) == 0) return FS_TYPE_FAT32;
+    if (memcmp(sector + 3, "FAT16   ", 8) == 0 ||
+        memcmp(sector + 3, "FAT12   ", 8) == 0) return FS_TYPE_FAT16;
+    return FS_TYPE_UNKNOWN;
+}
+
+static fs_type_t detect_fs_from_mbr_type(device_t *dev, uint8_t type, uint64_t start_lba) {
     switch (type) {
         case 0x01: return FS_TYPE_FAT12;
         case 0x04:
@@ -30,7 +44,7 @@ static fs_type_t detect_fs_from_mbr_type(uint8_t type) {
         case 0x0E: return FS_TYPE_FAT16;
         case 0x0B:
         case 0x0C: return FS_TYPE_FAT32;
-        case 0x07: return FS_TYPE_NTFS;  // Could also be exFAT
+        case 0x07: return detect_fs_from_boot(dev, start_lba);
         case 0x82: return FS_TYPE_LINUX_SWAP;
         case 0x83: return FS_TYPE_LINUX;
         default:   return FS_TYPE_UNKNOWN;
@@ -74,7 +88,7 @@ int pt_parse_mbr(device_t *dev, partition_table_t *table) {
         part->size_sectors = read_le32((const uint8_t *)&entry->sectors);
         part->size_bytes = part->size_sectors * dev->sector_size;
         part->is_bootable = (entry->boot_flag == 0x80);
-        part->fs_type = detect_fs_from_mbr_type(entry->type);
+        part->fs_type = detect_fs_from_mbr_type(dev, entry->type, part->start_lba);
         
         snprintf(part->name, sizeof(part->name), "Partition %d", i + 1);
         
@@ -111,7 +125,7 @@ int pt_parse_mbr(device_t *dev, partition_table_t *table) {
                     part->start_lba = ebr_lba + read_le32((const uint8_t *)&log_entry->lba_start);
                     part->size_sectors = read_le32((const uint8_t *)&log_entry->sectors);
                     part->size_bytes = part->size_sectors * dev->sector_size;
-                    part->fs_type = detect_fs_from_mbr_type(log_entry->type);
+                    part->fs_type = detect_fs_from_mbr_type(dev, log_entry->type, part->start_lba);
                     
                     snprintf(part->name, sizeof(part->name), "Logical %d", logical_index + 1);
                     

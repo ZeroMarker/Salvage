@@ -20,8 +20,11 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j$(nproc)
 
-      - name: Test
+      - name: Unit Tests
         run: cd build && ctest --output-on-failure
+
+      - name: E2E Test (FAT32)
+        run: python3 tests/e2e_fat32.py
 
       - name: Package
         run: |
@@ -48,8 +51,11 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
-      - name: Test
+      - name: Unit Tests
         run: cd build && ctest --output-on-failure -C Release
+
+      - name: E2E Test (FAT32)
+        run: python tests/e2e_fat32.py
 
       - name: Package
         run: |

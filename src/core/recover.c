@@ -1,5 +1,8 @@
 #include "recover.h"
 #include "fs/ntfs/ntfs.h"
+#include "fs/fat/fat.h"
+#include "fs/exfat/exfat.h"
+#include "partition/partition.h"
 #include "utils/log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -180,6 +183,117 @@ static int recover_from_signature(recover_task_t *task) {
     return SALVAGE_OK;
 }
 
+// Recover file using FAT32 cluster chain
+static int recover_from_fat(recover_task_t *task) {
+    fat_volume_t vol;
+    int ret = fat_init(&vol, task->device, task->partition_start_lba);
+    if (ret != SALVAGE_OK) {
+        LOG_WARN("Cannot init FAT32 volume for recovery");
+        return ret;
+    }
+
+    fat_file_info_t info;
+    memset(&info, 0, sizeof(info));
+    strncpy(info.name, task->result.name, sizeof(info.name) - 1);
+    info.first_cluster = task->result.first_cluster;
+    info.file_size = task->result.size;
+
+    if (info.first_cluster < 2) {
+        LOG_ERROR("Invalid first cluster for FAT recovery");
+        return SALVAGE_ERR_INVALID;
+    }
+
+    uint64_t total_size = info.file_size;
+    uint64_t chunk_size = 65536;
+    uint8_t *chunk = malloc(chunk_size);
+    if (!chunk) return SALVAGE_ERR_NO_MEMORY;
+
+    FILE *f = fopen(task->output_path, "wb");
+    if (!f) {
+        free(chunk);
+        LOG_ERROR("Cannot create output file: %s", task->output_path);
+        return SALVAGE_ERR_IO;
+    }
+
+    uint64_t offset = 0;
+    while (offset < total_size && !task->cancelled) {
+        uint64_t to_read = chunk_size;
+        if (offset + to_read > total_size) to_read = total_size - offset;
+
+        ret = fat_read_file_data(&vol, &info, offset, to_read, chunk);
+        if (ret != SALVAGE_OK) {
+            memset(chunk, 0, to_read);
+        }
+
+        fwrite(chunk, 1, to_read, f);
+        offset += to_read;
+
+        if (task->progress_cb) {
+            task->progress_cb(offset, total_size, task->user_data);
+        }
+    }
+
+    fclose(f);
+    free(chunk);
+    return task->cancelled ? SALVAGE_ERR_CANCELLED : SALVAGE_OK;
+}
+
+// Recover file using exFAT cluster chain
+static int recover_from_exfat(recover_task_t *task) {
+    exfat_volume_t vol;
+    int ret = exfat_init(&vol, task->device, task->partition_start_lba);
+    if (ret != SALVAGE_OK) {
+        LOG_WARN("Cannot init exFAT volume for recovery");
+        return ret;
+    }
+
+    exfat_file_info_t info;
+    memset(&info, 0, sizeof(info));
+    strncpy(info.name, task->result.name, sizeof(info.name) - 1);
+    info.first_cluster = task->result.first_cluster;
+    info.valid_data_length = task->result.size;
+    info.data_length = task->result.size;
+
+    if (info.first_cluster < 2) {
+        LOG_ERROR("Invalid first cluster for exFAT recovery");
+        return SALVAGE_ERR_INVALID;
+    }
+
+    uint64_t total_size = info.valid_data_length;
+    uint64_t chunk_size = 65536;
+    uint8_t *chunk = malloc(chunk_size);
+    if (!chunk) return SALVAGE_ERR_NO_MEMORY;
+
+    FILE *f = fopen(task->output_path, "wb");
+    if (!f) {
+        free(chunk);
+        LOG_ERROR("Cannot create output file: %s", task->output_path);
+        return SALVAGE_ERR_IO;
+    }
+
+    uint64_t offset = 0;
+    while (offset < total_size && !task->cancelled) {
+        uint64_t to_read = chunk_size;
+        if (offset + to_read > total_size) to_read = total_size - offset;
+
+        ret = exfat_read_file_data(&vol, &info, offset, to_read, chunk);
+        if (ret != SALVAGE_OK) {
+            memset(chunk, 0, to_read);
+        }
+
+        fwrite(chunk, 1, to_read, f);
+        offset += to_read;
+
+        if (task->progress_cb) {
+            task->progress_cb(offset, total_size, task->user_data);
+        }
+    }
+
+    fclose(f);
+    free(chunk);
+    return task->cancelled ? SALVAGE_ERR_CANCELLED : SALVAGE_OK;
+}
+
 int recover_start(recover_task_t *task) {
     if (!task) return SALVAGE_ERR_INVALID;
     
@@ -202,10 +316,12 @@ int recover_start(recover_task_t *task) {
     
     // Choose recovery method
     if (task->result.signature_name[0] != '\0') {
-        // Signature-based recovery
         return recover_from_signature(task);
+    } else if (task->result.fs_type == FS_TYPE_FAT32) {
+        return recover_from_fat(task);
+    } else if (task->result.fs_type == FS_TYPE_EXFAT) {
+        return recover_from_exfat(task);
     } else {
-        // MFT-based recovery
         return recover_from_mft(task);
     }
 }
