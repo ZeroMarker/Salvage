@@ -148,9 +148,27 @@ int cmd_recover(int argc, char *argv[]) {
     partition_table_t table;
     ret = pt_detect(&dev, &table);
     if (ret != SALVAGE_OK || table.count == 0) {
-        fprintf(stderr, "Error: No partitions found\n");
-        device_close(&dev);
-        return 1;
+        memset(&table, 0, sizeof(table));
+        table.type = PT_TYPE_NONE;
+        table.count = 1;
+        table.device = &dev;
+        table.entries[0].start_lba = 0;
+        table.entries[0].size_sectors = dev.total_sectors;
+        table.entries[0].size_bytes = dev.size_bytes;
+        table.entries[0].index = 0;
+
+        uint8_t boot[512];
+        if (device_read_sectors(&dev, 0, 1, boot) == SALVAGE_OK) {
+            if (memcmp(boot + 3, "NTFS    ", 8) == 0)
+                table.entries[0].fs_type = FS_TYPE_NTFS;
+            else if (memcmp(boot + 3, "FAT32   ", 8) == 0)
+                table.entries[0].fs_type = FS_TYPE_FAT32;
+            else if (memcmp(boot + 3, "EXFAT   ", 8) == 0)
+                table.entries[0].fs_type = FS_TYPE_EXFAT;
+        }
+
+        LOG_INFO("No partition table, treating as volume (fs=%s)",
+                 fs_type_name(table.entries[0].fs_type));
     }
     
     // Select partition
