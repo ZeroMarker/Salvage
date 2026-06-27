@@ -51,6 +51,18 @@ void result_list_free(result_list_t *list) {
     }
 }
 
+static void write_json_entry(FILE *f, const scan_result_t *r, int last) {
+    fprintf(f, "    {\n");
+    fprintf(f, "      \"id\": %llu,\n", (unsigned long long)r->file_id);
+    fprintf(f, "      \"name\": \"%s\",\n", r->name);
+    fprintf(f, "      \"extension\": \"%s\",\n", r->extension);
+    fprintf(f, "      \"size\": %llu,\n", (unsigned long long)r->size);
+    fprintf(f, "      \"deleted\": %s,\n", r->is_deleted ? "true" : "false");
+    fprintf(f, "      \"confidence\": %.1f,\n", r->confidence);
+    fprintf(f, "      \"category\": \"%s\"\n", sig_category_name(r->category));
+    fprintf(f, "    }%s\n", last ? "" : ",");
+}
+
 int result_list_export_json(const result_list_t *list, const char *path) {
     if (!list || !path) return SALVAGE_ERR_INVALID;
     
@@ -61,23 +73,50 @@ int result_list_export_json(const result_list_t *list, const char *path) {
     }
     
     fprintf(f, "{\n  \"results\": [\n");
-    
     for (int i = 0; i < list->count; i++) {
-        const scan_result_t *r = &list->items[i];
-        fprintf(f, "    {\n");
-        fprintf(f, "      \"id\": %llu,\n", (unsigned long long)r->file_id);
-        fprintf(f, "      \"name\": \"%s\",\n", r->name);
-        fprintf(f, "      \"extension\": \"%s\",\n", r->extension);
-        fprintf(f, "      \"size\": %llu,\n", (unsigned long long)r->size);
-        fprintf(f, "      \"deleted\": %s,\n", r->is_deleted ? "true" : "false");
-        fprintf(f, "      \"confidence\": %.1f,\n", r->confidence);
-        fprintf(f, "      \"category\": \"%s\"\n", sig_category_name(r->category));
-        fprintf(f, "    }%s\n", i < list->count - 1 ? "," : "");
+        write_json_entry(f, &list->items[i], i == list->count - 1);
     }
-    
     fprintf(f, "  ],\n  \"count\": %d\n}\n", list->count);
     fclose(f);
     
     LOG_INFO("Exported %d results to %s", list->count, path);
     return SALVAGE_OK;
+}
+
+void result_list_print_json(const result_list_t *list) {
+    if (!list) return;
+    
+    printf("{\n  \"results\": [\n");
+    for (int i = 0; i < list->count; i++) {
+        write_json_entry(stdout, &list->items[i], i == list->count - 1);
+    }
+    printf("  ],\n  \"count\": %d\n}\n", list->count);
+}
+
+int result_list_filter_by_category(result_list_t *list, int category) {
+    if (!list) return 0;
+    
+    int out = 0;
+    for (int i = 0; i < list->count; i++) {
+        if ((int)list->items[i].category == category) {
+            if (out != i) list->items[out] = list->items[i];
+            out++;
+        }
+    }
+    list->count = out;
+    return out;
+}
+
+int result_list_filter_by_min_size(result_list_t *list, uint64_t min_size) {
+    if (!list) return 0;
+    
+    int out = 0;
+    for (int i = 0; i < list->count; i++) {
+        if (list->items[i].size >= min_size) {
+            if (out != i) list->items[out] = list->items[i];
+            out++;
+        }
+    }
+    list->count = out;
+    return out;
 }

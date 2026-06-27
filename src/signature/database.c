@@ -93,7 +93,7 @@ int sig_load(signature_db_t *db, const char *path) {
             if (!key_end) break;
             
             char key[32] = {0};
-            int key_len = key_end - key_start;
+            int key_len = (int)(key_end - key_start);
             if (key_len >= 32) key_len = 31;
             strncpy(key, key_start, key_len);
             
@@ -110,7 +110,7 @@ int sig_load(signature_db_t *db, const char *path) {
                 if (!val_end) break;
                 
                 char val[128] = {0};
-                int val_len = val_end - val_start;
+                int val_len = (int)(val_end - val_start);
                 if (val_len >= 128) val_len = 127;
                 strncpy(val, val_start, val_len);
                 
@@ -133,7 +133,7 @@ int sig_load(signature_db_t *db, const char *path) {
                 while (*val_end && *val_end != ',' && *val_end != '}' && *val_end != '\n') val_end++;
                 
                 char val[32] = {0};
-                int val_len = val_end - val_start;
+                int val_len = (int)(val_end - val_start);
                 if (val_len >= 32) val_len = 31;
                 strncpy(val, val_start, val_len);
                 
@@ -167,21 +167,22 @@ int sig_load_defaults(signature_db_t *db) {
     memset(db, 0, sizeof(signature_db_t));
     
     // Image formats
-    struct { const char *name; const char *ext; const char *hdr; const char *ftr; sig_category_t cat; uint64_t max; } defaults[] = {
-        {"JPEG", "jpg,jpeg", "FF D8 FF", "FF D9", SIG_CATEGORY_IMAGE, 52428800},
-        {"PNG", "png", "89 50 4E 47 0D 0A 1A 0A", "49 45 4E 44 AE 42 60 82", SIG_CATEGORY_IMAGE, 104857600},
-        {"GIF", "gif", "47 49 46 38", "3B", SIG_CATEGORY_IMAGE, 52428800},
-        {"BMP", "bmp", "42 4D", "", SIG_CATEGORY_IMAGE, 104857600},
-        {"PDF", "pdf", "25 50 44 46", "25 25 45 4F 46", SIG_CATEGORY_DOCUMENT, 104857600},
-        {"DOC", "doc,xls,ppt", "D0 CF 11 E0 A1 B1 1A E1", "", SIG_CATEGORY_DOCUMENT, 104857600},
-        {"ZIP", "zip", "50 4B 03 04", "50 4B 05 06", SIG_CATEGORY_ARCHIVE, 4294967296},
-        {"RAR", "rar", "52 61 72 21 1A 07", "", SIG_CATEGORY_ARCHIVE, 4294967296},
-        {"MP3", "mp3", "49 44 33", "", SIG_CATEGORY_AUDIO, 52428800},
-        {"WAV", "wav", "52 49 46 46", "", SIG_CATEGORY_AUDIO, 524288000},
-        {"AVI", "avi", "52 49 46 46", "", SIG_CATEGORY_VIDEO, 4294967296},
-        {"MKV", "mkv", "1A 45 DF A3", "", SIG_CATEGORY_VIDEO, 4294967296},
-        {"EXE", "exe,dll", "4D 5A", "", SIG_CATEGORY_EXECUTABLE, 524288000},
-        {NULL, NULL, NULL, NULL, 0, 0}
+    struct { const char *name; const char *ext; const char *hdr; const char *ftr; sig_category_t cat; uint64_t max; int sub_off; const char *sub; } defaults[] = {
+        {"JPEG", "jpg,jpeg", "FF D8 FF", "FF D9", SIG_CATEGORY_IMAGE, 52428800, 0, NULL},
+        {"PNG", "png", "89 50 4E 47 0D 0A 1A 0A", "49 45 4E 44 AE 42 60 82", SIG_CATEGORY_IMAGE, 104857600, 0, NULL},
+        {"GIF", "gif", "47 49 46 38", "3B", SIG_CATEGORY_IMAGE, 52428800, 0, NULL},
+        {"BMP", "bmp", "42 4D", "", SIG_CATEGORY_IMAGE, 104857600, 0, NULL},
+        {"WebP", "webp", "52 49 46 46", "", SIG_CATEGORY_IMAGE, 104857600, 8, "57 45 42 50"},
+        {"PDF", "pdf", "25 50 44 46", "25 25 45 4F 46", SIG_CATEGORY_DOCUMENT, 104857600, 0, NULL},
+        {"DOC", "doc,xls,ppt", "D0 CF 11 E0 A1 B1 1A E1", "", SIG_CATEGORY_DOCUMENT, 104857600, 0, NULL},
+        {"ZIP", "zip", "50 4B 03 04", "50 4B 05 06", SIG_CATEGORY_ARCHIVE, 4294967296, 0, NULL},
+        {"RAR", "rar", "52 61 72 21 1A 07", "", SIG_CATEGORY_ARCHIVE, 4294967296, 0, NULL},
+        {"MP3", "mp3", "49 44 33", "", SIG_CATEGORY_AUDIO, 52428800, 0, NULL},
+        {"WAV", "wav", "52 49 46 46", "", SIG_CATEGORY_AUDIO, 524288000, 8, "57 41 56 45"},
+        {"AVI", "avi", "52 49 46 46", "", SIG_CATEGORY_VIDEO, 4294967296, 8, "41 56 49 20"},
+        {"MKV", "mkv", "1A 45 DF A3", "", SIG_CATEGORY_VIDEO, 4294967296, 0, NULL},
+        {"EXE", "exe,dll", "4D 5A", "", SIG_CATEGORY_EXECUTABLE, 524288000, 0, NULL},
+        {NULL, NULL, NULL, NULL, 0, 0, 0, NULL}
     };
     
     for (int i = 0; defaults[i].name; i++) {
@@ -192,6 +193,10 @@ int sig_load_defaults(signature_db_t *db) {
         sig->footer_len = parse_hex(defaults[i].ftr, sig->footer, 16);
         sig->category = defaults[i].cat;
         sig->max_size = defaults[i].max;
+        if (defaults[i].sub) {
+            sig->sub_offset = defaults[i].sub_off;
+            sig->sub_len = parse_hex(defaults[i].sub, sig->sub_bytes, 16);
+        }
         db->count++;
     }
     
@@ -202,17 +207,29 @@ int sig_load_defaults(signature_db_t *db) {
 int sig_match_header(const signature_db_t *db, const uint8_t *data, int len) {
     if (!db || !data || len < 4) return -1;
     
+    int best = -1;
+    int best_sub_len = 0;
+    
     for (int i = 0; i < db->count; i++) {
         const signature_t *sig = &db->entries[i];
         if (sig->header_len == 0) continue;
         if (sig->header_len > len) continue;
         
         if (memcmp(data, sig->header, sig->header_len) == 0) {
-            return i;
+            if (sig->sub_len > 0) {
+                if (sig->sub_offset + sig->sub_len > len) continue;
+                if (memcmp(data + sig->sub_offset, sig->sub_bytes, sig->sub_len) != 0) continue;
+                if (sig->sub_len > best_sub_len) {
+                    best = i;
+                    best_sub_len = sig->sub_len;
+                }
+            } else if (best < 0) {
+                best = i;
+            }
         }
     }
     
-    return -1;
+    return best;
 }
 
 int sig_match_footer(const signature_db_t *db, int sig_index,

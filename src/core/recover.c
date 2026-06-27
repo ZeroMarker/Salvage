@@ -18,6 +18,7 @@ struct recover_task {
     device_t *device;
     scan_result_t result;
     char output_path[512];
+    uint64_t partition_start_lba;
     
     recover_progress_cb progress_cb;
     void *user_data;
@@ -25,7 +26,7 @@ struct recover_task {
     volatile int cancelled;
 };
 
-recover_task_t* recover_create(device_t *dev, const scan_result_t *result, const char *output_dir) {
+recover_task_t* recover_create(device_t *dev, const scan_result_t *result, const char *output_dir, uint64_t partition_start_lba) {
     if (!dev || !result || !output_dir) return NULL;
     
     recover_task_t *task = calloc(1, sizeof(recover_task_t));
@@ -33,6 +34,7 @@ recover_task_t* recover_create(device_t *dev, const scan_result_t *result, const
     
     task->device = dev;
     memcpy(&task->result, result, sizeof(scan_result_t));
+    task->partition_start_lba = partition_start_lba;
     
     // Build output path
     snprintf(task->output_path, sizeof(task->output_path), "%s/%s", output_dir, result->name);
@@ -50,7 +52,7 @@ void recover_set_progress(recover_task_t *task, recover_progress_cb cb, void *us
 // Recover file using MFT information
 static int recover_from_mft(recover_task_t *task) {
     ntfs_volume_t vol;
-    int ret = ntfs_init(&vol, task->device, 0);  // Assume partition starts at 0
+    int ret = ntfs_init(&vol, task->device, task->partition_start_lba);
     if (ret != SALVAGE_OK) {
         // Try using file_id as MFT number on current partition
         LOG_WARN("Cannot init NTFS volume for MFT recovery");

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(Salvage VERSION 0.1.0 LANGUAGES C)
+project(Salvage VERSION 0.2.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -21,6 +21,8 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 # Warning flags
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
+elseif(MSVC)
+    add_compile_options(/utf-8)
 endif()
 
 # Include directories

@@ -3,6 +3,7 @@
 #include "partition/partition.h"
 #include "core/scanner.h"
 #include "core/result.h"
+#include "signature/signature.h"
 #include "utils/log.h"
 #include "utils/str.h"
 #include <stdio.h>
@@ -15,9 +16,22 @@ static void print_help(void) {
     printf("Options:\n");
     printf("  -m, --mode <quick|deep|signature>  Scan mode (default: quick)\n");
     printf("  -p, --partition <index>            Partition index (default: auto)\n");
-    printf("  -o, --output <path>                Output JSON file\n");
+    printf("  -t, --type <category>              Filter by type: image, doc, audio, video, archive, all (default: all)\n");
+    printf("  -s, --min-size <bytes>             Minimum file size in bytes\n");
+    printf("  -o, --output <path>                Output JSON to file\n");
+    printf("  -j, --json                         Output JSON to stdout\n");
     printf("  -h, --help                         Show this help\n");
     printf("  -v, --verbose                      Verbose output\n");
+}
+
+static sig_category_t parse_type_filter(const char *type) {
+    if (strcmp(type, "image") == 0) return SIG_CATEGORY_IMAGE;
+    if (strcmp(type, "doc") == 0 || strcmp(type, "document") == 0) return SIG_CATEGORY_DOCUMENT;
+    if (strcmp(type, "audio") == 0) return SIG_CATEGORY_AUDIO;
+    if (strcmp(type, "video") == 0) return SIG_CATEGORY_VIDEO;
+    if (strcmp(type, "archive") == 0) return SIG_CATEGORY_ARCHIVE;
+    if (strcmp(type, "executable") == 0) return SIG_CATEGORY_EXECUTABLE;
+    return SIG_CATEGORY_UNKNOWN;
 }
 
 static void progress_callback(int percent, int files_found, void *user_data) {
@@ -37,6 +51,10 @@ int cmd_scan(int argc, char *argv[]) {
     const char *output_path = NULL;
     scan_mode_t mode = SCAN_QUICK;
     int partition_index = -1;
+    int type_filter = -1;  // -1 = all
+    uint64_t min_size = 0;
+    int json_stdout = 0;
+    int verbose = 0;
     
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -54,17 +72,34 @@ int cmd_scan(int argc, char *argv[]) {
                 }
             }
         } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--partition") == 0) {
+            if (i + 1 < argc) partition_index = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--type") == 0) {
             if (i + 1 < argc) {
-                partition_index = atoi(argv[++i]);
+                i++;
+                if (strcmp(argv[i], "all") == 0) {
+                    type_filter = -1;
+                } else {
+                    type_filter = (int)parse_type_filter(argv[i]);
+                    if (type_filter == (int)SIG_CATEGORY_UNKNOWN) {
+                        fprintf(stderr, "Error: Unknown type '%s'\n", argv[i]);
+                        return 1;
+                    }
+                }
             }
+        } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--min-size") == 0) {
+            if (i + 1 < argc) min_size = strtoull(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
-            if (i + 1 < argc) {
-                output_path = argv[++i];
-            }
+            if (i + 1 < argc) output_path = argv[++i];
+        } else if (strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--json") == 0) {
+            json_stdout = 1;
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            verbose = 1;
         } else if (argv[i][0] != '-') {
             device_path = argv[i];
         }
     }
+    
+    if (verbose) log_set_level(LOG_LEVEL_DEBUG);
     
     if (!device_path) {
         fprintf(stderr, "Error: Device path required\n");
@@ -140,17 +175,31 @@ int cmd_scan(int argc, char *argv[]) {
     int result_count;
     scan_get_results(task, &results, &result_count);
     
-    if (result_count == 0) {
+    // Apply filters
+    result_list_t list = { .items = results, .count = result_count };
+    
+    if (type_filter >= 0) {
+        result_list_filter_by_category(&list, type_filter);
+    }
+    if (min_size > 0) {
+        result_list_filter_by_min_size(&list, min_size);
+    }
+    
+    int filtered_count = list.count;
+    
+    if (json_stdout) {
+        result_list_print_json(&list);
+    } else if (filtered_count == 0) {
         printf("No deleted files found.\n");
     } else {
-        printf("Found %d deleted files:\n\n", result_count);
+        printf("Found %d deleted files:\n\n", filtered_count);
         printf("  %-6s %-30s %-12s %-10s %s\n",
                "ID", "Name", "Size", "Type", "Confidence");
         printf("  %-6s %-30s %-12s %-10s %s\n",
                "--", "----", "----", "----", "----------");
         
-        for (int i = 0; i < result_count && i < 100; i++) {
-            scan_result_t *r = &results[i];
+        for (int i = 0; i < filtered_count && i < 100; i++) {
+            scan_result_t *r = &list.items[i];
             char size_str[32];
             format_size(r->size, size_str, sizeof(size_str));
             
@@ -162,16 +211,18 @@ int cmd_scan(int argc, char *argv[]) {
                    r->confidence);
         }
         
-        if (result_count > 100) {
-            printf("  ... and %d more files\n", result_count - 100);
+        if (filtered_count > 100) {
+            printf("  ... and %d more files\n", filtered_count - 100);
         }
     }
     
-    // Export if requested
+    // Export to file if requested
     if (output_path) {
-        result_list_t list = { .items = results, .count = result_count };
-        result_list_export_json(&list, output_path);
-        printf("\nResults exported to: %s\n", output_path);
+        result_list_t export_list = { .items = results, .count = result_count };
+        if (type_filter >= 0) result_list_filter_by_category(&export_list, type_filter);
+        if (min_size > 0) result_list_filter_by_min_size(&export_list, min_size);
+        result_list_export_json(&export_list, output_path);
+        if (!json_stdout) printf("\nResults exported to: %s\n", output_path);
     }
     
     scan_destroy(task);

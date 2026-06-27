@@ -13,3 +13,7 @@ add_test(NAME test_partition COMMAND test_partition)
 add_executable(test_signature test_signature.c)
 target_link_libraries(test_signature PRIVATE salvage_lib)
 add_test(NAME test_signature COMMAND test_signature)
+
+add_executable(test_scanner test_scanner.c)
+target_link_libraries(test_scanner PRIVATE salvage_lib)
+add_test(NAME test_scanner COMMAND test_scanner)

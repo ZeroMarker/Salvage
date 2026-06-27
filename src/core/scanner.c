@@ -55,6 +55,20 @@ void scan_set_progress(scan_task_t *task, scan_progress_cb cb, void *user_data) 
     }
 }
 
+// Calculate confidence score for MFT-based result
+static float calc_mft_confidence(const ntfs_file_info_t *info) {
+    float score = 50.0;  // Base: deleted MFT record found
+    
+    if (info->name[0] != '\0') score += 15.0;       // Has filename
+    if (info->data_size > 0) score += 10.0;          // Has data size
+    if (info->data_lcn > 0) score += 15.0;           // Has data runs (knows where data is)
+    if (info->create_time > 0) score += 5.0;         // Has timestamps
+    if (info->modify_time > 0) score += 5.0;
+    
+    if (score > 100.0) score = 100.0;
+    return score;
+}
+
 // Quick scan: enumerate MFT for deleted files
 static int scan_quick_mft(scan_task_t *task) {
     int ret = ntfs_init(&task->ntfs_vol, task->device, task->partition.start_lba);
@@ -123,10 +137,7 @@ static int scan_quick_mft(scan_task_t *task) {
         }
         
         // Confidence based on data completeness
-        result.confidence = 85.0;  // Base confidence for MFT recovery
-        if (info.data_size > 0 && info.data_lcn > 0) {
-            result.confidence = 95.0;  // High confidence if data runs exist
-        }
+        result.confidence = calc_mft_confidence(&info);
         
         result_list_add(&task->results, &result);
     }
@@ -197,19 +208,32 @@ static int scan_signature(scan_task_t *task) {
             strncpy(result.extension, sig->extensions, sizeof(result.extension) - 1);
             result.category = sig->category;
             result.is_deleted = 1;
-            result.confidence = 60.0;  // Base confidence for signature scan
+            
+            // Base confidence for signature scan
+            float conf = 40.0;
+            conf += 10.0;  // Header matched
+            if (sig->category != SIG_CATEGORY_UNKNOWN) conf += 10.0;  // Known category
+            if (sig->max_size > 0 && sig->max_size < 1073741824) conf += 5.0;  // Reasonable max size
             
             // Try to determine size if footer exists
             if (sig->footer_len > 0) {
-                // Search for footer in remaining data
                 for (uint64_t j = i + sig->header_len; j < to_read - sig->footer_len; j++) {
                     if (memcmp(buf + j, sig->footer, sig->footer_len) == 0) {
                         result.size = j + sig->footer_len - i;
-                        result.confidence = 75.0;
+                        conf += 25.0;  // Footer found = much higher confidence
                         break;
                     }
                 }
             }
+            
+            if (result.size == 0) {
+                result.size = sig->max_size;
+                conf -= 10.0;  // No exact size, lower confidence
+            }
+            
+            if (conf > 100.0) conf = 100.0;
+            if (conf < 0.0) conf = 0.0;
+            result.confidence = conf;
             
             if (result.size == 0) {
                 result.size = sig->max_size;  // Use max size as estimate

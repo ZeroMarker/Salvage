@@ -165,7 +165,7 @@ int ntfs_read_file_data(ntfs_volume_t *vol, const ntfs_file_info_t *info,
                 return SALVAGE_ERR_NO_MEMORY;
             }
             
-            ret = device_read_sectors(vol->device, read_lba, read_sectors, tmp);
+            ret = device_read_sectors(vol->device, read_lba, (uint32_t)read_sectors, tmp);
             if (ret != SALVAGE_OK) {
                 free(tmp);
                 free(record);

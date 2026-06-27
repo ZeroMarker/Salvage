@@ -100,12 +100,18 @@ static void list_disk_partitions(const char *disk_path) {
 }
 
 int cmd_list(int argc, char *argv[]) {
+    int verbose = 0;
+    
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             print_help();
             return 0;
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            verbose = 1;
         }
     }
+    
+    if (verbose) log_set_level(LOG_LEVEL_DEBUG);
     
 #ifdef PLATFORM_WINDOWS
     list_physical_disks();

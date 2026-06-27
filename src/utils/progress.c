@@ -22,7 +22,6 @@ void progress_update(progress_t *prog, uint64_t current) {
     fprintf(stderr, "\r  [");
     for (int i = 0; i < prog->width; i++) {
         if (i < filled) fprintf(stderr, "█");
-        else if (i == filled) fprintf(stderr, "░");
         else fprintf(stderr, "░");
     }
     fprintf(stderr, "] %3d%%", percent);

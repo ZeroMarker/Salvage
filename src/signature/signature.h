@@ -26,6 +26,9 @@ typedef struct {
     int footer_len;          // Footer length
     uint64_t max_size;       // Maximum expected file size
     sig_category_t category;
+    int sub_offset;          // Sub-type check offset (0 = no sub-type check)
+    uint8_t sub_bytes[16];   // Sub-type bytes to match at sub_offset
+    int sub_len;             // Sub-type bytes length
 } signature_t;
 
 // Signature database

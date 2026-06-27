@@ -13,7 +13,7 @@ typedef struct recover_task recover_task_t;
 typedef void (*recover_progress_cb)(uint64_t written, uint64_t total, void *user_data);
 
 // Create recovery task
-recover_task_t* recover_create(device_t *dev, const scan_result_t *result, const char *output_dir);
+recover_task_t* recover_create(device_t *dev, const scan_result_t *result, const char *output_dir, uint64_t partition_start_lba);
 
 // Set progress callback
 void recover_set_progress(recover_task_t *task, recover_progress_cb cb, void *user_data);
